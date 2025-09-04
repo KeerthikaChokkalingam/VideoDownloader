@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7F2D24762E6A142A0088F176 /* Video+CoreDataProperties.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2D24752E6A142A0088F176 /* Video+CoreDataProperties.swift */; };
+		7F2D24772E6A142A0088F176 /* Video+CoreDataClass.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F2D24742E6A142A0088F176 /* Video+CoreDataClass.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		7F2D24372E6A06AB0088F176 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +32,8 @@
 		7F2D241D2E6A06AA0088F176 /* VideoDownloader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VideoDownloader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F2D24362E6A06AB0088F176 /* VideoDownloaderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VideoDownloaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7F2D24402E6A06AB0088F176 /* VideoDownloaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VideoDownloaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7F2D24742E6A142A0088F176 /* Video+CoreDataClass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Video+CoreDataClass.swift"; path = "VideoDownloader/CoreData/Video+CoreDataClass.swift"; sourceTree = "<group>"; };
+		7F2D24752E6A142A0088F176 /* Video+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Video+CoreDataProperties.swift"; path = "VideoDownloader/CoreData/Video+CoreDataProperties.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -88,6 +95,8 @@
 		7F2D24142E6A06AA0088F176 = {
 			isa = PBXGroup;
 			children = (
+				7F2D24742E6A142A0088F176 /* Video+CoreDataClass.swift */,
+				7F2D24752E6A142A0088F176 /* Video+CoreDataProperties.swift */,
 				7F2D241F2E6A06AA0088F176 /* VideoDownloader */,
 				7F2D24392E6A06AB0088F176 /* VideoDownloaderTests */,
 				7F2D24432E6A06AB0088F176 /* VideoDownloaderUITests */,
@@ -249,6 +258,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7F2D24762E6A142A0088F176 /* Video+CoreDataProperties.swift in Sources */,
+				7F2D24772E6A142A0088F176 /* Video+CoreDataClass.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -292,11 +303,14 @@
 				DEVELOPMENT_TEAM = FY39LJ4W2H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VideoDownloader/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = VideoDownloader;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -320,11 +334,14 @@
 				DEVELOPMENT_TEAM = FY39LJ4W2H;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VideoDownloader/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = VideoDownloader;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
