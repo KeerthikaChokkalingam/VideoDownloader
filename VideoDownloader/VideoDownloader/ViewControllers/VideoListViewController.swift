@@ -5,6 +5,7 @@
 //  Created by Keerthika on 05/09/25.
 //
 
+
 import UIKit
 import AVKit
 
@@ -18,7 +19,6 @@ class VideoListViewController: UIViewController, UITableViewDataSource, UITableV
         title = "Downloaded Videos"
         view.backgroundColor = .white
         
-        // Create TableView
         tableView = UITableView(frame: view.bounds, style: .plain)
         tableView.dataSource = self
         tableView.delegate = self
@@ -51,7 +51,19 @@ class VideoListViewController: UIViewController, UITableViewDataSource, UITableV
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
         let videoURL = downloadedVideos[indexPath.row]
         cell.textLabel?.text = videoURL.lastPathComponent
+        
+        // Add delete (trash) button on the right
+        let deleteButton = UIButton(type: .system)
+        deleteButton.setImage(UIImage(systemName: "trash"), for: .normal)
+        deleteButton.tintColor = .red
+        deleteButton.tag = indexPath.row
+        deleteButton.addTarget(self, action: #selector(deleteButtonTapped(_:)), for: .touchUpInside)
+        deleteButton.frame = CGRect(x: 0, y: 0, width: 30, height: 30)
+        cell.accessoryView = deleteButton
+        
         return cell
+        
+        
     }
     
     // MARK: - UITableView Delegate
@@ -69,4 +81,41 @@ class VideoListViewController: UIViewController, UITableViewDataSource, UITableV
             player.play()
         }
     }
+    
+    // MARK: - Delete Handling
+    @objc private func deleteButtonTapped(_ sender: UIButton) {
+        let index = sender.tag
+        let videoURL = downloadedVideos[index]
+        
+        let alert = UIAlertController(
+            title: "Delete Video",
+            message: "Are you sure you want to delete \"\(videoURL.lastPathComponent)\"?",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive, handler: { _ in
+            self.deleteVideo(at: index)
+        }))
+        
+        present(alert, animated: true)
+    }
+    // In VideoListViewController
+    private func deleteVideo(at index: Int) {
+        let fileURL = downloadedVideos[index]
+        do {
+            try FileManager.default.removeItem(at: fileURL)
+            downloadedVideos.remove(at: index)
+            tableView.deleteRows(at: [IndexPath(row: index, section: 0)], with: .automatic)
+
+            // Notify DownloadsViewController
+            NotificationCenter.default.post(
+                name: .videoDeleted,
+                object: fileURL
+            )
+        } catch {
+            print("❌ Error deleting file: \(error)")
+        }
+    }
+
 }

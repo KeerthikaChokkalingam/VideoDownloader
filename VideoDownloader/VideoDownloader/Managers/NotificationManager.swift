@@ -16,3 +16,7 @@ class NotificationManager: UIViewController {
 
 
 }
+// Common notification name
+extension Notification.Name {
+    static let videoDeleted = Notification.Name("videoDeleted")
+}
