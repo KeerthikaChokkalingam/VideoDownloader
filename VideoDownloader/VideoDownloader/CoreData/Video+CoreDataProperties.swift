@@ -11,7 +11,13 @@ import CoreData
 
 
 extension Video {
-
+    
+    var daysLeft: Int {
+        guard let expiry = expiryDate else { return 0 }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
+        return max(days, 0)
+    }
+    
     @nonobjc public class func fetchRequest() -> NSFetchRequest<Video> {
         return NSFetchRequest<Video>(entityName: "Video")
     }

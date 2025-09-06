@@ -10,6 +10,8 @@ import Foundation
 import UserNotifications
 import UIKit
 import CoreData
+import BackgroundTasks
+
 protocol DownloadManagerDelegate: AnyObject {
     func downloadProgress(for url: URL, progress: Float)
     func downloadCompleted(for url: URL, location: URL)
@@ -42,6 +44,8 @@ final class DownloadManager: NSObject {
 
     private var resumeDataMap: [URL: URL] = [:] // URL -> resume file URL on disk
     private var activeDownloads: [URL: URLSessionDownloadTask] = [:]
+    private let maxConcurrentDownloads = 3
+    private var pendingDownloads: [URL] = []
 
     private lazy var backgroundSession: URLSession = {
         let config = URLSessionConfiguration.background(withIdentifier: "com.keerthika.VideoDownloader.bgSession")
@@ -85,7 +89,7 @@ final class DownloadManager: NSObject {
                 resumeFileName: nil,
                 downloaded: false,
                 createdAt: Date(),
-                expiresAt: nil)
+                expiresAt: Calendar.current.date(byAdding: .day, value: 30, to: Date()))
             transform(&md)
             metadataMap[key] = md
         }
@@ -96,6 +100,11 @@ final class DownloadManager: NSObject {
 
     func startDownload(from url: URL) {
         // check free space
+        
+        if activeDownloads.count >= maxConcurrentDownloads {
+                    if !pendingDownloads.contains(url) { pendingDownloads.append(url) }
+                    return
+                }
         let requiredSpace: Int64 = 100 * 1024 * 1024
         let freeSpace = StorageManager.getFreeDiskSpace()
         if freeSpace < requiredSpace {
@@ -125,7 +134,13 @@ final class DownloadManager: NSObject {
         updateMetadataFor(url: url) { $0.progress = 0 }
         task.resume()
     }
-
+func downloadDidFinish(url: URL) {
+    activeDownloads.removeValue(forKey: url)
+    if let nextURL = pendingDownloads.first {
+        pendingDownloads.removeFirst()
+        startDownload(from: nextURL)
+    }
+}
     func pauseDownload(for url: URL) {
         guard let task = activeDownloads[url] else { return }
         task.cancel { [weak self] resumeData in
@@ -235,16 +250,22 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 $0.localFileName = srcURL.lastPathComponent
                 $0.progress = 1.0
                 $0.resumeFileName = nil
+                $0.createdAt = Date() // download date
+                $0.expiresAt = Calendar.current.date(byAdding: .day, value: 30, to: Date())
             }
+
             // remove any resume file if present
             if let rurl = resumeDataMap[srcURL] {
                 try? FileManager.default.removeItem(at: rurl)
                 resumeDataMap.removeValue(forKey: srcURL)
             }
-
+            if let metadata = metadataMap[srcURL.absoluteString] {
+                        updateCoreData(for: srcURL, metadata: metadata)
+                    }
             DispatchQueue.main.async {
                 self.delegate?.downloadCompleted(for: srcURL, location: dest)
                 self.sendDownloadNotification(fileName: srcURL.lastPathComponent)
+                self.showCompletionAlert(for: srcURL.lastPathComponent)
             }
         } catch {
             DispatchQueue.main.async {
@@ -259,15 +280,24 @@ extension DownloadManager: URLSessionDownloadDelegate {
         guard let url = task.originalRequest?.url else { return }
 
         if let err = error as NSError? {
-            // If cancelled by user to pause (NSURLSessionTaskCancelReasonUserInitiated is not always provided),
-            // treat Cancelled specially. NSURLErrorCancelled is used for many cancels including pause.
-            // We don't mark failure on user-initiated pause/cancel — the pause method writes resume data and caller should update UI.
+            // Cancelled (pause) — already handled
             if err.domain == NSURLErrorDomain && err.code == NSURLErrorCancelled {
-                // Don't notify failure here — pauseDownload handles resumeData save.
                 activeDownloads.removeValue(forKey: url)
                 return
             }
 
+            // Timeout error
+            if err.domain == NSURLErrorDomain && err.code == NSURLErrorTimedOut {
+                DispatchQueue.main.async { [weak self] in
+                    self?.delegate?.downloadFailed(for: url, error: err)
+                    // Optionally, show retry alert
+                    self?.showRetryAlert(for: url, error: err)
+                }
+                activeDownloads.removeValue(forKey: url)
+                return
+            }
+
+            // Other errors
             DispatchQueue.main.async {
                 self.delegate?.downloadFailed(for: url, error: err)
             }
@@ -275,8 +305,25 @@ extension DownloadManager: URLSessionDownloadDelegate {
             return
         }
 
-        // no error — nothing to do (completion should already be handled in didFinishDownloadingTo)
+        // no error — nothing to do (completion handled in didFinishDownloadingTo)
         activeDownloads.removeValue(forKey: url)
+    }
+
+    // Optional helper to show retry alert
+    private func showRetryAlert(for url: URL, error: NSError) {
+        guard let topVC = UIApplication.shared.connectedScenes
+                .filter({ $0.activationState == .foregroundActive })
+                .compactMap({ $0 as? UIWindowScene })
+                .first?.windows
+                .first(where: { $0.isKeyWindow })?.rootViewController else { return }
+        let alert = UIAlertController(title: "Download Failed",
+                                      message: "Download for \(url.lastPathComponent) failed due to timeout. Retry?",
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Retry", style: .default, handler: { _ in
+            self.startDownload(from: url)
+        }))
+        topVC.present(alert, animated: true)
     }
 
     // When background session finishes events (app was in background), AppDelegate must hold completion handler.
@@ -290,40 +337,23 @@ extension DownloadManager: URLSessionDownloadDelegate {
         }
     }
     
-    func cleanExpiredVideos() {
-            let context = CoreDataManager.shared.viewContext
-            let fetchRequest: NSFetchRequest<Video> = Video.fetchRequest()
-            guard let videos = try? context.fetch(fetchRequest) else { return }
-    
-            videos.forEach { video in
-                if let date = video.createdAt, Date().timeIntervalSince(date) > 30*24*3600 {
-                    video.isExpired = true
-                    if let filePath = video.filePath {
-                        try? FileManager.default.removeItem(at: StorageManager.localFileURL(for: filePath))
-                    }
-                }
-            }
-            CoreDataManager.shared.saveContext()
-        }
     private func updateCoreData(for url: URL, metadata: DownloadMetadata) {
         let context = CoreDataManager.shared.viewContext
         let fetch: NSFetchRequest<Video> = Video.fetchRequest()
-        fetch.predicate = NSPredicate(format: "urlString == %@", url.absoluteString)
-    
+        fetch.predicate = NSPredicate(format: "filePath == %@", url.absoluteString)
+
         let video = (try? context.fetch(fetch).first) ?? Video(context: context)
 
-        // Assign metadata values to video
-        video.filePath = metadata.urlString
-        video.progress = metadata.progress.magnitudeSquared
+        video.filePath = url.absoluteString   // ✅ use url.absoluteString
+        video.progress = Double(metadata.progress)
         video.title = metadata.localFileName ?? metadata.resumeFileName
         video.createdAt = metadata.createdAt
         video.expiryDate = metadata.expiresAt
-        var videoDownload : Bool = false
-        // Derive downloaded state from progress
-        videoDownload = (video.progress >= 1.0)
-        videoDownload = metadata.downloaded
+        video.isExpired = (video.expiryDate ?? Date.distantFuture) < Date()
+
         CoreDataManager.shared.saveContext()
     }
+
     private func restoreState() {
         loadMetadata()
         restoreBackgroundTasks()
@@ -338,5 +368,75 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
         }
     }
+    func cleanExpiredVideos() {
+        for (urlString, metadata) in metadataMap {
+            if metadata.expiresAt ?? Date() <= Date() {
+                if let fileName = metadata.localFileName {
+                    let fileURL = StorageManager.localFileURL(for: fileName)
+                    try? FileManager.default.removeItem(at: fileURL)
+                }
+                metadataMap.removeValue(forKey: urlString)
+            }
+        }
+        persistMetadata()
+    }
+    func scheduleCleanExpiredVideosTask() {
+        let request = BGProcessingTaskRequest(identifier: "com.myapp.cleanExpiredVideos")
+        request.requiresNetworkConnectivity = false
+        request.requiresExternalPower = false
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 24*60*60) // once a day
+        
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("Failed to schedule background task: \(error)")
+        }
+    }
+    func handleCleanExpiredVideosTask(task: BGProcessingTask) {
+        task.expirationHandler = {
+            task.setTaskCompleted(success: false)
+        }
 
+        DownloadManager.shared.cleanExpiredVideos() // delete expired files & metadata
+
+        task.setTaskCompleted(success: true)
+        scheduleCleanExpiredVideosTask() // reschedule next
+    }
+    private func showCompletionAlert(for fileName: String) {
+        guard let topVC = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first?.windows
+            .first(where: { $0.isKeyWindow })?.rootViewController else {
+            return
+        }
+        
+        let alert = UIAlertController(
+            title: "Download Complete",
+            message: "\(fileName) is ready to watch.",
+            preferredStyle: .alert
+        )
+        
+        // OK button → just dismiss
+        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+        
+        // Go to List button → push VideoListViewController
+        alert.addAction(UIAlertAction(title: "Go to List", style: .default, handler: { _ in
+            let listVC = VideoListViewController()
+            if let nav = topVC as? UINavigationController {
+                nav.pushViewController(listVC, animated: true)
+            } else {
+                topVC.navigationController?.pushViewController(listVC, animated: true)
+            }
+        }))
+        
+        topVC.present(alert, animated: true)
+    }
+
+}
+extension DownloadMetadata {
+    var remainingDays: Int {
+        guard let expiry = expiresAt else { return 0 }
+        let days = Calendar.current.dateComponents([.day], from: Date(), to: expiry).day ?? 0
+        return max(days, 0)
+    }
 }

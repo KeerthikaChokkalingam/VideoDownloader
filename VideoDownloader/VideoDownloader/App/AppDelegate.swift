@@ -7,6 +7,7 @@
 
 import UIKit
 import CoreData
+import BackgroundTasks
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -15,7 +16,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
-        DownloadManager.shared.cleanExpiredVideos()
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.myapp.cleanExpiredVideos", using: nil) { task in
+            DownloadManager.shared.handleCleanExpiredVideosTask(task: task as! BGProcessingTask)
+        }
+
         return true
     }
     var backgroundCompletionHandler: (() -> Void)?
