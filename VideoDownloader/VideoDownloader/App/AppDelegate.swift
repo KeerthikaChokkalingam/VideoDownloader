@@ -18,7 +18,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         DownloadManager.shared.cleanExpiredVideos()
         return true
     }
-
+    var backgroundCompletionHandler: (() -> Void)?
+        
+        func application(_ application: UIApplication,
+                         handleEventsForBackgroundURLSession identifier: String,
+                         completionHandler: @escaping () -> Void) {
+            // Store it until URLSession tells us downloads finished
+            backgroundCompletionHandler = completionHandler
+        }
     // MARK: UISceneSession Lifecycle
 
     func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {

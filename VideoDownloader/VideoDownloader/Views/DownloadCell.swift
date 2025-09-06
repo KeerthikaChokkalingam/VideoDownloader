@@ -10,11 +10,11 @@ import UIKit
 class DownloadCell: UITableViewCell {
     static let reuseIdentifier = "VideoDownloadCell"
 
-     let titleLabel = UILabel()
-     let actionButton = UIButton(type: .system)
-     let pauseResumeButton = UIButton(type: .system)
-     let progressView = UIProgressView(progressViewStyle: .default)
-     let progressLabel = UILabel() 
+    let titleLabel = UILabel()
+    let actionButton = UIButton(type: .system)
+    let pauseResumeButton = UIButton(type: .system)
+    let progressView = UIProgressView(progressViewStyle: .default)
+    let progressLabel = UILabel()
 
     // Callbacks
     var startDownloadAction: (() -> Void)?
@@ -23,6 +23,7 @@ class DownloadCell: UITableViewCell {
     var retryDownloadAction: (() -> Void)?
     var openFileAction: (() -> Void)?
 
+    // UI flags (the controller is authoritative)
     private var isPaused = false
     private var isDownloading = false
     private var hasFailed = false
@@ -36,15 +37,10 @@ class DownloadCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) not implemented") }
 
     private func setupUI() {
-        // Background card style
         contentView.backgroundColor = .clear
         let cardView = UIView()
         cardView.backgroundColor = .secondarySystemBackground
         cardView.layer.cornerRadius = 12
-        cardView.layer.shadowColor = UIColor.black.cgColor
-        cardView.layer.shadowOpacity = 0.1
-        cardView.layer.shadowOffset = CGSize(width: 0, height: 2)
-        cardView.layer.shadowRadius = 4
         cardView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(cardView)
 
@@ -55,12 +51,9 @@ class DownloadCell: UITableViewCell {
             cardView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8)
         ])
 
-        // Title
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
         titleLabel.numberOfLines = 2
-        titleLabel.textAlignment = .left
 
-        // Action buttons
         configureIconButton(actionButton, systemName: "arrow.down.circle")
         actionButton.addTarget(self, action: #selector(onActionTap), for: .touchUpInside)
 
@@ -70,25 +63,18 @@ class DownloadCell: UITableViewCell {
 
         let buttonStack = UIStackView(arrangedSubviews: [actionButton, pauseResumeButton])
         buttonStack.axis = .horizontal
-        buttonStack.alignment = .center
         buttonStack.spacing = 24
-        buttonStack.distribution = .equalCentering
-
-        // Progress
-        progressView.progress = 0.0
-        progressView.trackTintColor = UIColor.systemGray5
-        progressView.tintColor = UIColor.systemBlue
 
         progressLabel.font = .systemFont(ofSize: 13, weight: .medium)
         progressLabel.textColor = .secondaryLabel
         progressLabel.text = "0%"
 
+        progressView.progress = 0
         let progressStack = UIStackView(arrangedSubviews: [progressView, progressLabel])
         progressStack.axis = .horizontal
         progressStack.spacing = 8
         progressStack.alignment = .center
 
-        // Main vertical stack
         let mainStack = UIStackView(arrangedSubviews: [titleLabel, buttonStack, progressStack])
         mainStack.axis = .vertical
         mainStack.spacing = 12
@@ -100,14 +86,13 @@ class DownloadCell: UITableViewCell {
             mainStack.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -16),
             mainStack.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 16),
             mainStack.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -16),
-
             progressView.heightAnchor.constraint(equalToConstant: 4)
         ])
     }
 
     private func configureIconButton(_ button: UIButton, systemName: String) {
-        let config = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
-        button.setImage(UIImage(systemName: systemName, withConfiguration: config), for: .normal)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 22, weight: .medium)
+        button.setImage(UIImage(systemName: systemName, withConfiguration: cfg), for: .normal)
         button.tintColor = .systemBlue
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -116,7 +101,7 @@ class DownloadCell: UITableViewCell {
         ])
     }
 
-    // MARK: - Button Actions
+    // MARK: - Actions
     @objc private func onActionTap() {
         if isDownloaded {
             openFileAction?()
@@ -133,9 +118,10 @@ class DownloadCell: UITableViewCell {
         } else {
             pauseDownloadAction?()
         }
+        // No local toggle — controller will call configure(...) after state changes
     }
 
-    // MARK: - Configure
+    // MARK: - Configure UI from controller
     func configure(title: String,
                    progress: Float,
                    downloading: Bool = false,
@@ -150,37 +136,27 @@ class DownloadCell: UITableViewCell {
         isPaused = paused
         isDownloaded = downloaded
 
-        // Always make sure actionButton is visible unless paused/downloading
-        actionButton.isHidden = false
         updateUI()
     }
 
-
     private func updateUI() {
         if isDownloaded {
-            // Show "open file" option
+            actionButton.isHidden = false
             actionButton.setImage(UIImage(systemName: "folder"), for: .normal)
             pauseResumeButton.isHidden = true
-
         } else if hasFailed {
-            // Show retry
+            actionButton.isHidden = false
             actionButton.setImage(UIImage(systemName: "arrow.clockwise"), for: .normal)
             pauseResumeButton.isHidden = true
-
         } else if isPaused {
-            // Paused: Show resume button, hide "Download"
             actionButton.isHidden = true
             pauseResumeButton.isHidden = false
             pauseResumeButton.setImage(UIImage(systemName: "play.fill"), for: .normal)
-
         } else if isDownloading {
-            // Actively downloading
             actionButton.isHidden = true
             pauseResumeButton.isHidden = false
             pauseResumeButton.setImage(UIImage(systemName: "pause.fill"), for: .normal)
-
         } else {
-            // Not started
             actionButton.isHidden = false
             actionButton.setImage(UIImage(systemName: "arrow.down.circle"), for: .normal)
             pauseResumeButton.isHidden = true
@@ -188,9 +164,9 @@ class DownloadCell: UITableViewCell {
             progressLabel.text = "0%"
         }
     }
+
     func updateProgress(_ progress: Float) {
         progressView.setProgress(progress, animated: true)
         progressLabel.text = "\(Int(progress * 100))%"
     }
-
 }
