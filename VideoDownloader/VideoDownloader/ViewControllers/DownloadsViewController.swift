@@ -16,7 +16,7 @@ struct VideoItem {
     let url: URL
 }
 
-class DownloadsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, URLSessionDownloadDelegate {
+class DownloadsViewController: UIViewController, UITableViewDataSource, UITableViewDelegate,DownloadManagerDelegate {
 
     // UI
     private var tableView: UITableView!
@@ -27,16 +27,6 @@ class DownloadsViewController: UIViewController, UITableViewDataSource, UITableV
     private var downloadingSet: Set<URL> = []
     private var pausedSet = Set<URL>()
     private var failedSet = Set<URL>()
-
-    // TASK / RESUME DATA TRACKING
-    private var downloadTasks: [URL: URLSessionDownloadTask] = [:]
-    private var resumeDataDict: [URL: Data] = [:]
-
-    // Single session used for all foreground downloads (keeps delegate alive)
-    private lazy var downloadSession: URLSession = {
-        let config = URLSessionConfiguration.default
-        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
-    }()
 
     // Activity indicator while fetching remote index
     private let spinner = UIActivityIndicatorView(style: .large)
@@ -56,7 +46,7 @@ class DownloadsViewController: UIViewController, UITableViewDataSource, UITableV
             )
         title = "Available Videos"
         view.backgroundColor = .systemBackground
-
+        DownloadManager.shared.delegate = self
         setupTableView()
         setupSpinner()
 
@@ -239,34 +229,6 @@ class DownloadsViewController: UIViewController, UITableViewDataSource, UITableV
         return docs.appendingPathComponent(item.url.lastPathComponent)
     }
 
-    // MARK: - Download control (pause/resume working)
-    private func startDownload(item: VideoItem) {
-        if let resumeData = resumeDataDict[item.url] {
-            let task = downloadSession.downloadTask(withResumeData: resumeData)
-            task.taskDescription = item.url.absoluteString
-            downloadTasks[item.url] = task
-            resumeDataDict.removeValue(forKey: item.url)
-            downloadingSet.insert(item.url)
-            pausedSet.remove(item.url)
-            failedSet.remove(item.url)
-            progressDict[item.url] = progressDict[item.url] ?? 0.0
-            task.resume()
-            reloadCell(for: item)
-            return
-        }
-
-        // normal start
-        let task = downloadSession.downloadTask(with: item.url)
-        task.taskDescription = item.url.absoluteString
-        downloadTasks[item.url] = task
-        downloadingSet.insert(item.url)
-        pausedSet.remove(item.url)
-        failedSet.remove(item.url)
-        progressDict[item.url] = 0.0
-        task.resume()
-        reloadCell(for: item)
-    }
-
     private func updateProgress(for url: URL, progress: Float) {
         DispatchQueue.main.async {
             if let row = self.videos.firstIndex(where: { $0.url == url }),
@@ -274,52 +236,6 @@ class DownloadsViewController: UIViewController, UITableViewDataSource, UITableV
                 cell.updateProgress(progress)
             }
         }
-    }
-
-    private func pauseDownload(item: VideoItem) {
-        guard let task = downloadTasks[item.url] else { return }
-        // Cancel and produce resume data
-        task.cancel(byProducingResumeData: { [weak self] data in
-            guard let self = self else { return }
-            DispatchQueue.main.async {
-                if let d = data {
-                    self.resumeDataDict[item.url] = d
-                } else {
-                    // No resume data: treat as failed to pause/resume gracefully
-                    print("⚠️ No resume data produced for \(item.url.lastPathComponent)")
-                }
-                self.downloadTasks.removeValue(forKey: item.url)
-                self.downloadingSet.remove(item.url)
-                self.pausedSet.insert(item.url)
-                self.reloadCell(for: item)
-            }
-        })
-    }
-
-    private func resumeDownload(item: VideoItem) {
-        // If we have resume data, resume from it
-        if let resumeData = resumeDataDict[item.url] {
-            let task = downloadSession.downloadTask(withResumeData: resumeData)
-            task.taskDescription = item.url.absoluteString
-            downloadTasks[item.url] = task
-            resumeDataDict.removeValue(forKey: item.url)
-            downloadingSet.insert(item.url)
-            pausedSet.remove(item.url)
-            task.resume()
-            reloadCell(for: item)
-            return
-        }
-
-        // otherwise start fresh
-        startDownload(item: item)
-    }
-
-    private func retryDownload(item: VideoItem) {
-        failedSet.remove(item.url)
-        // clear any stale resume data and start new
-        resumeDataDict.removeValue(forKey: item.url)
-        downloadTasks.removeValue(forKey: item.url)
-        startDownload(item: item)
     }
 
     // Helper to reload a cell (main thread)
@@ -346,127 +262,68 @@ class DownloadsViewController: UIViewController, UITableViewDataSource, UITableV
         vc.player = player
         present(vc, animated: true) { player.play() }
     }
+    // MARK: - Download control (pause/resume working)
 
-    // MARK: - URLSessionDownloadDelegate
-
-    // Progress
-    func urlSession(_ session: URLSession,
-                    downloadTask: URLSessionDownloadTask,
-                    didWriteData bytesWritten: Int64,
-                    totalBytesWritten: Int64,
-                    totalBytesExpectedToWrite: Int64) {
-        guard let urlString = downloadTask.taskDescription,
-              let url = URL(string: urlString) else { return }
-
-        guard totalBytesExpectedToWrite > 0 else { return }
-
-        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+    func downloadProgress(for url: URL, progress: Float) {
         progressDict[url] = progress
-        updateProgress(for: url, progress: progress)
-    }
-
-    // Completion: move to Documents folder
-    func urlSession(_ session: URLSession,
-                    downloadTask: URLSessionDownloadTask,
-                    didFinishDownloadingTo location: URL) {
-        guard let urlString = downloadTask.taskDescription,
-              let url = URL(string: urlString) else { return }
-
-        downloadTasks.removeValue(forKey: url)
-        resumeDataDict.removeValue(forKey: url)
-
-        guard let item = videos.first(where: { $0.url == url }) else { return }
-
-        let dest = localFileURL(for: item)
-        do {
-            if FileManager.default.fileExists(atPath: dest.path) {
-                try FileManager.default.removeItem(at: dest)
-            }
-            try FileManager.default.moveItem(at: location, to: dest)
-
-            DispatchQueue.main.async {
-                self.downloadingSet.remove(url)
-                self.pausedSet.remove(url)
-                self.failedSet.remove(url)
-                self.progressDict[url] = 1.0
-                self.reloadCell(for: item)
-
-                let alert = UIAlertController(title: "Download Complete",
-                                              message: "\(item.title) saved.",
-                                              preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                alert.addAction(UIAlertAction(title: "View Downloads", style: .default) { _ in
-                    let listVC = VideoListViewController()
-                    self.navigationController?.pushViewController(listVC, animated: true)
-                })
-                self.present(alert, animated: true)
-            }
-        } catch {
-            print("❌ Error saving file:", error)
-            DispatchQueue.main.async {
-                self.downloadingSet.remove(url)
-                self.failedSet.insert(url)
-                self.progressDict[url] = 0.0
-                self.reloadCell(for: item)
-
-                let alert = UIAlertController(title: "Save Failed",
-                                              message: error.localizedDescription,
-                                              preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                self.present(alert, animated: true)
+        DispatchQueue.main.async {
+            if let row = self.videos.firstIndex(where: { $0.url == url }),
+               let cell = self.tableView.cellForRow(at: IndexPath(row: row, section: 0)) as? DownloadCell {
+                cell.updateProgress(progress)
             }
         }
     }
 
-    // Task-level completion with error handling
-    func urlSession(_ session: URLSession,
-                    task: URLSessionTask,
-                    didCompleteWithError error: Error?) {
-        guard let urlString = task.taskDescription,
-              let url = URL(string: urlString) else { return }
 
-        if let err = error as NSError? {
-            if let resume = err.userInfo[NSURLSessionDownloadTaskResumeData] as? Data {
-                resumeDataDict[url] = resume
-                DispatchQueue.main.async {
-                    self.downloadingSet.remove(url)
-                    self.pausedSet.insert(url)
-                    self.reloadCell(for: url)
-                }
-                return
-            }
+    func downloadCompleted(for url: URL, location: URL) {
+            progressDict[url] = 1.0
+            downloadingSet.remove(url)
+            pausedSet.remove(url)
+            failedSet.remove(url)
+            reloadCell(for: url)
+    }
 
-            if err.domain == NSURLErrorDomain && err.code == NSURLErrorTimedOut {
-                DispatchQueue.main.async {
-                    if let item = self.videos.first(where: { $0.url == url }) {
-                        let alert = UIAlertController(title: "Download Timeout",
-                                                      message: "The download timed out. Do you want to retry?",
-                                                      preferredStyle: .alert)
-                        alert.addAction(UIAlertAction(title: "Retry", style: .default) { _ in
-                            self.retryDownload(item: item)
-                        })
-                        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-                        self.present(alert, animated: true)
-                    }
-                }
-                return
-            }
+    func downloadFailed(for url: URL, error: Error) {
+        failedSet.insert(url)
+            downloadingSet.remove(url)
+            pausedSet.remove(url)
+            progressDict[url] = 0.0
+            reloadCell(for: url)
+    }
 
-            DispatchQueue.main.async {
-                self.downloadTasks.removeValue(forKey: url)
-                self.resumeDataDict[url] = nil
-                self.downloadingSet.remove(url)
-                self.pausedSet.remove(url)
-                self.failedSet.insert(url)
-                self.progressDict[url] = 0.0
-                self.reloadCell(for: url)
-            }
-        } else {
-            DispatchQueue.main.async {
-                self.downloadTasks.removeValue(forKey: url)
-                self.resumeDataDict.removeValue(forKey: url)
-            }
-        }
+    func downloadNotEnoughSpace(for url: URL) {
+        let alert = UIAlertController(title: "Not Enough Space",
+                                      message: "Cannot download \(url.lastPathComponent).",
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+    private func startDownload(item: VideoItem) {
+            downloadingSet.insert(item.url)
+            failedSet.remove(item.url)
+            pausedSet.remove(item.url)
+            progressDict[item.url] = 0.0
+            reloadCell(for: item)
+            DownloadManager.shared.startDownload(from: item.url)
+    }
+
+    private func pauseDownload(item: VideoItem) {
+        DownloadManager.shared.pauseDownload(for: item.url)
+            downloadingSet.remove(item.url)
+            pausedSet.insert(item.url)
+            reloadCell(for: item)
+    }
+
+    private func resumeDownload(item: VideoItem) {
+        DownloadManager.shared.resumeDownload(for: item.url)
+            pausedSet.remove(item.url)
+            downloadingSet.insert(item.url)
+            reloadCell(for: item)
+    }
+
+    private func retryDownload(item: VideoItem) {
+        DownloadManager.shared.startDownload(from: item.url) // just restart
     }
 
 }
+

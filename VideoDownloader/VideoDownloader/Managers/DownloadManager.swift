@@ -128,8 +128,18 @@ extension DownloadManager: URLSessionDownloadDelegate {
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let url = task.originalRequest?.url else { return }
-        if let err = error { DispatchQueue.main.async { self.delegate?.downloadFailed(for: url, error: err) } }
-        activeDownloads.removeValue(forKey: url)
+            
+            if let err = error as NSError? {
+                if err.domain == NSURLErrorDomain,
+                   err.code == NSURLErrorCancelled {
+                    // Cancelled on purpose (pause) → don’t mark failed
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.delegate?.downloadFailed(for: url, error: err)
+                }
+            }
+            activeDownloads.removeValue(forKey: url)
     }
     
     private func sendDownloadNotification(fileName: String) {

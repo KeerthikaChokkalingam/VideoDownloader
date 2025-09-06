@@ -133,8 +133,6 @@ class DownloadCell: UITableViewCell {
         } else {
             pauseDownloadAction?()
         }
-        isPaused.toggle()
-        updateUI()
     }
 
     // MARK: - Configure
