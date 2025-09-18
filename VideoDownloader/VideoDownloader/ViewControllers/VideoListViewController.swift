@@ -23,37 +23,12 @@ class VideoListViewController: UIViewController, UITableViewDataSource, UITableV
         tableView = UITableView(frame: view.bounds, style: .plain)
         tableView.dataSource = self
         tableView.delegate = self
-//        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "cell")
         view.addSubview(tableView)
         
         loadDownloadedVideos()
     }
     
-    /// Load all mp4 files from Documents directory
-//    func loadDownloadedVideos() {
-//        let fileManager = FileManager.default
-//        let docsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
-//        
-//        do {
-//            let files = try fileManager.contentsOfDirectory(at: docsURL, includingPropertiesForKeys: nil)
-//            downloadedVideos = files.filter { $0.pathExtension == "mp4" }
-//            
-//            tableView.reloadData()
-//        } catch {
-//            print("❌ Error loading files: \(error)")
-//        }
-//    }
-//    func loadDownloadedVideos() {
-//        let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-//        let fetchRequest: NSFetchRequest<Video> = Video.fetchRequest()
-//        
-//        do {
-//            downloadedVideos = try context.fetch(fetchRequest)  // ✅ Now Core Data objects
-//            tableView.reloadData()
-//        } catch {
-//            print("❌ Error fetching videos: \(error)")
-//        }
-//    }
+
     func loadDownloadedVideos() {
         let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
         let fetchRequest: NSFetchRequest<Video> = Video.fetchRequest()
@@ -90,9 +65,6 @@ class VideoListViewController: UIViewController, UITableViewDataSource, UITableV
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-//        let cell = tableView.dequeueReusableCell(withIdentifier: "cell", for: indexPath)
-//        let videoURL = downloadedVideos[indexPath.row]
-//        cell.textLabel?.text = videoURL.lastPathComponent
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell") ??
                        UITableViewCell(style: .subtitle, reuseIdentifier: "cell") // ✅ subtitle style
             
