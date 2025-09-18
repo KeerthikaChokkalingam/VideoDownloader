@@ -349,8 +349,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
         video.title = metadata.localFileName ?? metadata.resumeFileName
         video.createdAt = metadata.createdAt
         video.expiryDate = metadata.expiresAt
-        video.isExpired = (video.expiryDate ?? Date.distantFuture) < Date()
-
+        let expiryDate = Calendar.current.date(byAdding: .day, value: 30, to: Date())
+        video.expiryDate = expiryDate ?? Date()
         CoreDataManager.shared.saveContext()
     }
 
